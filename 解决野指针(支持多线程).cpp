@@ -47,12 +47,12 @@ struct Ref\
 template<class Ty>
 struct RefTaker
 {
-    RefTaker(Ty::Ref &ref)
+    RefTaker(typename Ty::Ref &ref)
     {
         _take(ref);
     }
 
-    RefTaker& operator=(const Ty::Ref &ref)
+    RefTaker& operator=(typename Ty::Ref &ref)
     {
         _take(ref);
     }
@@ -65,7 +65,7 @@ struct RefTaker
 
     Ty* _src{ 0 };
     std::mutex *_mtr{ 0 };
-    void _take(Ty::Ref &ref)
+    void _take(typename Ty::Ref &ref)
     {
         Ty *ty = *ref._src;
         if (ty)
@@ -114,11 +114,15 @@ int main(int argc, char *argv[])
     //KList.emplace_back(k2);
     //KList.emplace_back(k3);
 
-    //KList.begin()->K = NULL;
     Object::Ref ref1(k1);
-    RefTaker<Object> taker(ref1);
-    Object *obj = taker.get();
+    
+    {
+        RefTaker<Object> taker(ref1);
+        Object *obj = taker.get();
+    }
+    
     delete k1;
     k1 = NULL;
     KList.erase(KList.begin());
+    return 0;
 };
