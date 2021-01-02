@@ -9,4 +9,5 @@ Tip:
 2. RefTaker::get() is used to normal logic but it will lock longer.
 3. If you don't need a ref point to real memory any more, just call deref().
 4. Translate Chinese comment yourself.
-5. Feed me back any bug in Issues.
+5. Do not put ref in vector that will cause balabala...you debug yourself.
+6. Feed me back any bug in Issues.
