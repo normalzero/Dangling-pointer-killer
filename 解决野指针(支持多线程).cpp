@@ -1,9 +1,12 @@
+#include <mutex>
+#include <memory>
+
 #define _REF(Ty)\
-std::mutex _mtx;\
+std::shared_ptr<std::recursive_mutex> _mtr;\
 std::list<Ty**> _refs;\
 struct Ref\
 {\
-    Ref(Ref &ref)\
+    Ref(const Ref &ref)\
     {\
         _src = new Ty*;\
         (*_src) = *ref._src;\
@@ -13,17 +16,21 @@ struct Ref\
 \
     Ref(Ty *k)\
     {\
-        _src = new Ty*;\
-        (*_src) = k;\
-        k->_refs.emplace_back(&(*_src));\
-        _spy = &k->_refs.back();\
+        if (k) {\
+            _src = new Ty*;\
+            (*_src) = k;\
+            k->_refs.emplace_back(&(*_src));\
+            _spy = &k->_refs.back();\
+        }\
     }\
 \
     ~Ref()\
     {\
-        deref();\
-        delete _src;\
-        _src = NULL;\
+        if (_src){\
+            deref();\
+            delete _src;\
+            _src = NULL;\
+        }\
     }\
 \
     Ty **_src{0};\
@@ -31,10 +38,12 @@ struct Ref\
 \
     Ty* get()\
     {\
+        if (_src == 0)\
+            return 0;\
         Ty *ty = *_src;\
         if (ty)\
         {\
-            std::lock_guard<std::mutex> lock(ty->_mtx);\
+            std::lock_guard<std::recursive_mutex> lock(*ty->_mtr);\
             return *_src;\
         }\
 \
@@ -59,23 +68,26 @@ struct RefTaker
 
     ~RefTaker()
     {
-        if (_mtr)
+        if (_mtr.get())
             (*_mtr).unlock();
     }
 
     Ty* _src{ 0 };
-    std::mutex *_mtr{ 0 };
+    std::shared_ptr<std::recursive_mutex> _mtr;
     void _take(typename Ty::Ref &ref)
     {
+        if (ref._src == NULL)
+            return;
+
         Ty *ty = *ref._src;
         if (ty)
         {
-            ty->_mtx.lock();
+            (*ty->_mtr).lock();
             _src = *ref._src;
             if (_src == NULL)
-                ty->_mtx.unlock();
+                (*ty->_mtr).unlock();
             else
-                _mtr = &ty->_mtx;
+                _mtr = ty->_mtr;
         }
     }
     Ty* get()
@@ -84,17 +96,21 @@ struct RefTaker
     }
 };
 
+#define _REFI() _mtr = std::make_shared<std::recursive_mutex>()
+#define _REFR() \
+_for(itr, _refs.begin(), _refs.end())\
+{\
+    std::lock_guard<std::recursive_mutex> lock(*_mtr);\
+    if ((*itr) && *(*itr))\
+        *(*itr) = NULL;\
+}
+
 class Object
 {
 public:
     virtual ~Object()
     {
-        _for(itr, _refs.begin(), _refs.end())
-        {
-            std::lock_guard<std::mutex> lock(_mtx);
-            if ((*itr) && *(*itr))
-                *(*itr) = NULL;
-        }
+        _REFR();
     }
 
     // 外部非局部引用的指针对象(简称外部使用) 旨在解决原对象与外部引用指针的异步释放产生野指针的问题
